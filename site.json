@@ -1,0 +1,10 @@
+{
+  "description": "Reads entire file contents and executes predefined instructions to automate tasks, enhancing efficiency for users handling file-based workflows.",
+  "robots": {
+    "index": false
+  },
+  "accessibility": {
+    "addBypassLinks": false,
+    "ignoreReducedMotion": false
+  }
+}

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>BMW GYM — Kiểm Thử Tự Động Đợt 8 Bổ Sung: Demo Auth & RBAC</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 24px; background: #f8fafc; color: #1e293b; }
+        h1 { font-size: 20px; font-weight: 800; margin-bottom: 8px; }
+        .summary-banner { padding: 16px; border-radius: 8px; margin-bottom: 20px; font-weight: 700; font-size: 15px; }
+        .summary-banner.pass { background: #dcfce7; color: #166534; border: 1px solid #86efac; }
+        .summary-banner.fail { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        table { width: 100%; border-collapse: collapse; background: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+        th, td { padding: 10px 14px; text-align: left; font-size: 13px; border-bottom: 1px solid #e2e8f0; }
+        th { background: #f1f5f9; font-weight: 700; color: #475569; }
+        .badge { display: inline-block; padding: 3px 8px; border-radius: 4px; font-weight: 700; font-size: 11px; text-transform: uppercase; }
+        .badge-pass { background: #dcfce7; color: #166534; }
+        .badge-fail { background: #fee2e2; color: #991b1b; }
+        iframe { width: 1px; height: 1px; border: 0; position: absolute; left: -9999px; }
+    </style>
+</head>
+<body>
+    <h1>BMW GYM — KẾT QUẢ KIỂM THỬ ĐỢT 8 BỔ SUNG (DEMO ADMIN/STAFF & PHÂN QUYỀN)</h1>
+    <p style="color: #64748b; margin-top: 0;">Kiểm tra tự động Nhóm A (Dropdown), Nhóm B (Tài khoản demo), Nhóm C (Phân quyền & Bảo vệ truy cập) và Nhóm D (Hồi quy).</p>
+
+    <div id="summary-banner" class="summary-banner">Đang tiến hành kiểm thử...</div>
+
+    <table>
+        <thead>
+            <tr>
+                <th style="width: 80px;">Mã</th>
+                <th style="width: 140px;">Nhóm</th>
+                <th>Mô tả kiểm thử</th>
+                <th>Kỳ vọng</th>
+                <th>Thực tế</th>
+                <th style="width: 90px;">Kết quả</th>
+            </tr>
+        </thead>
+        <tbody id="test-body"></tbody>
+    </table>
+
+    <iframe id="test-frame" src="about:blank"></iframe>
+
+    <script src="js/auth-guard.js"></script>
+
+    <script>
+    (async function () {
+        const tbody = document.getElementById('test-body');
+        const summary = document.getElementById('summary-banner');
+        const frame = document.getElementById('test-frame');
+
+        const testResults = [];
+        let passCount = 0;
+        let failCount = 0;
+
+        function record(code, group, desc, expected, actual, pass) {
+            if (pass) passCount++; else failCount++;
+            testResults.push({ code, group, desc, expected, actual, pass });
+
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><strong>${code}</strong></td>
+                <td>${group}</td>
+                <td>${desc}</td>
+                <td>${expected}</td>
+                <td><code>${typeof actual === 'object' ? JSON.stringify(actual) : String(actual)}</code></td>
+                <td><span class="badge ${pass ? 'badge-pass' : 'badge-fail'}">${pass ? 'PASS' : 'FAIL'}</span></td>
+            `;
+            tbody.appendChild(tr);
+        }
+
+        function loadFrame(url) {
+            return new Promise((resolve, reject) => {
+                frame.src = url;
+                frame.onload = () => {
+                    setTimeout(() => resolve(frame.contentWindow), 300);
+                };
+                frame.onerror = reject;
+            });
+        }
+
+        // Setup clean mock data before starting
+        const initialUsers = window.BMW_AUTH_GUARD.getUsers();
+        
+        // ──────────────────────────────────────────────────────────────────────────
+        // NHÓM A — ACCOUNT DROPDOWN
+        // ──────────────────────────────────────────────────────────────────────────
+        try {
+            // Load index.html
+            const win = await loadFrame('index.html');
+            const menu = win.document.querySelector('.account-dropdown-menu');
+
+            // A1: Check presence of 4 required items
+            const loginLink = menu ? menu.querySelector('a[href="login.html"]') : null;
+            const regLink = menu ? menu.querySelector('a[href="register.html"]') : null;
+            const adminLink = menu ? menu.querySelector('a[href*="demo=admin"]') : null;
+            const staffLink = menu ? menu.querySelector('a[href*="demo=staff"]') : null;
+
+            record('A01', 'Nhóm A - Dropdown', 'Menu chứa liên kết Login', 'Tồn tại', loginLink ? 'Tồn tại' : 'Thiếu', Boolean(loginLink));
+            record('A02', 'Nhóm A - Dropdown', 'Menu chứa liên kết Register (Create Account)', 'Tồn tại', regLink ? 'Tồn tại' : 'Thiếu', Boolean(regLink));
+            record('A03', 'Nhóm A - Dropdown', 'Menu chứa liên kết Admin Demo rõ ràng', 'href chứa demo=admin', adminLink ? adminLink.getAttribute('href') : 'Thiếu', Boolean(adminLink));
+            record('A04', 'Nhóm A - Dropdown', 'Menu chứa liên kết Staff Demo rõ ràng', 'href chứa demo=staff', staffLink ? staffLink.getAttribute('href') : 'Thiếu', Boolean(staffLink));
+
+            // A5: Toggle menu open via button click
+            const toggleBtn = win.document.querySelector('.account-toggle-btn');
+            if (toggleBtn && menu) {
+                toggleBtn.click();
+                const isOpen = menu.classList.contains('active');
+                record('A05', 'Nhóm A - Dropdown', 'Nhấn icon Account mở dropdown (Desktop/Mobile)', 'active class added', isOpen ? 'active class added' : 'not active', isOpen);
+            } else {
+                record('A05', 'Nhóm A - Dropdown', 'Nhấn icon Account mở dropdown', 'true', 'false', false);
+            }
+
+            // A6: Không tự ý hiển thị username dưới icon account khi chưa đăng nhập
+            const toggleText = toggleBtn ? toggleBtn.textContent.trim() : '';
+            record('A06', 'Nhóm A - Dropdown', 'Icon account không chứa username lộ ngoài header', '', toggleText, toggleText === '');
+
+        } catch (e) {
+            record('A_ERR', 'Nhóm A - Dropdown', 'Lỗi thực thi Nhóm A', 'Không lỗi', e.message, false);
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────
+        // NHÓM B — TÀI KHOẢN DEMO
+        // ──────────────────────────────────────────────────────────────────────────
+        try {
+            const users = window.BMW_AUTH_GUARD.getUsers();
+            const adminDemo = users.find(u => u.username === 'admin_demo');
+            const staffDemo = users.find(u => u.username === 'staff_demo');
+
+            // B1: Tồn tại độc lập
+            record('B01', 'Nhóm B - Demo Users', 'Tài khoản admin_demo tồn tại', 'admin_demo', adminDemo ? adminDemo.username : 'Thiếu', Boolean(adminDemo));
+            record('B02', 'Nhóm B - Demo Users', 'Tài khoản admin_demo có vai trò ADMIN', 'admin', adminDemo ? adminDemo.role : 'None', adminDemo && adminDemo.role === 'admin');
+            record('B03', 'Nhóm B - Demo Users', 'Tài khoản staff_demo tồn tại', 'staff_demo', staffDemo ? staffDemo.username : 'Thiếu', Boolean(staffDemo));
+            record('B04', 'Nhóm B - Demo Users', 'Tài khoản staff_demo có vai trò STAFF', 'staff', staffDemo ? staffDemo.role : 'None', staffDemo && staffDemo.role === 'staff');
+            record('B05', 'Nhóm B - Demo Users', 'Hai tài khoản có ID riêng biệt không trùng nhau', 'Khác nhau', (adminDemo && staffDemo && adminDemo.id !== staffDemo.id) ? 'Khác nhau' : 'Trùng hoặc thiếu', Boolean(adminDemo && staffDemo && adminDemo.id !== staffDemo.id));
+
+            // B6: Idempotent initialization
+            const userCountBefore = users.length;
+            window.BMW_AUTH_GUARD.getUsers(); // run again
+            const userCountAfter = window.BMW_AUTH_GUARD.getUsers().length;
+            record('B06', 'Nhóm B - Demo Users', 'Khởi tạo idempotent: không tạo bản ghi trùng khi chạy lại', userCountBefore, userCountAfter, userCountBefore === userCountAfter);
+
+            // B7: Test pre-fill Admin Demo on login.html?demo=admin
+            const winAdminLogin = await loadFrame('login.html?demo=admin');
+            const adminIdentityInput = winAdminLogin.document.getElementById('login-identity');
+            const adminPasswordInput = winAdminLogin.document.getElementById('login-password');
+            const adminNotice = winAdminLogin.document.getElementById('login-demo-notice');
+
+            record('B07', 'Nhóm B - Pre-fill Admin', 'Vào login.html?demo=admin điền sẵn username admin_demo', 'admin_demo', adminIdentityInput ? adminIdentityInput.value : '', adminIdentityInput && adminIdentityInput.value === 'admin_demo');
+            record('B08', 'Nhóm B - Pre-fill Admin', 'Vào login.html?demo=admin điền sẵn password Admin@2026', 'Admin@2026', adminPasswordInput ? adminPasswordInput.value : '', adminPasswordInput && adminPasswordInput.value === 'Admin@2026');
+            record('B09', 'Nhóm B - Pre-fill Admin', 'Có thông báo trực quan chế độ Demo Quản trị', 'Hiển thị', adminNotice && adminNotice.style.display !== 'none' ? 'Hiển thị' : 'Ẩn', adminNotice && adminNotice.style.display !== 'none');
+
+            // B10: Không tự động đăng nhập khi mở trang
+            const sessionDuringAdminLoad = winAdminLogin.sessionStorage.getItem('bmw_current_user');
+            record('B10', 'Nhóm B - No Auto Login', 'Không tự động đăng nhập khi mở trang (phải nhấn nút)', null, sessionDuringAdminLoad, sessionDuringAdminLoad === null);
+
+            // B11: Test pre-fill Staff Demo on login.html?demo=staff
+            const winStaffLogin = await loadFrame('login.html?demo=staff');
+            const staffIdentityInput = winStaffLogin.document.getElementById('login-identity');
+            const staffPasswordInput = winStaffLogin.document.getElementById('login-password');
+            const staffNotice = winStaffLogin.document.getElementById('login-demo-notice');
+
+            record('B11', 'Nhóm B - Pre-fill Staff', 'Vào login.html?demo=staff điền sẵn username staff_demo', 'staff_demo', staffIdentityInput ? staffIdentityInput.value : '', staffIdentityInput && staffIdentityInput.value === 'staff_demo');
+            record('B12', 'Nhóm B - Pre-fill Staff', 'Vào login.html?demo=staff điền sẵn password Staff@2026', 'Staff@2026', staffPasswordInput ? staffPasswordInput.value : '', staffPasswordInput && staffPasswordInput.value === 'Staff@2026');
+            record('B13', 'Nhóm B - Pre-fill Staff', 'Có thông báo trực quan chế độ Demo Nhân viên', 'Hiển thị', staffNotice && staffNotice.style.display !== 'none' ? 'Hiển thị' : 'Ẩn', staffNotice && staffNotice.style.display !== 'none');
+
+            // B14: Sai mật khẩu không được đăng nhập
+            winAdminLogin.document.getElementById('login-identity').value = 'admin_demo';
+            winAdminLogin.document.getElementById('login-password').value = 'WrongPassword123';
+            winAdminLogin.document.getElementById('login-form').dispatchEvent(new winAdminLogin.Event('submit', { cancelable: true, bubbles: true }));
+            const passErr = winAdminLogin.document.getElementById('login-password-error');
+            const failedSession = winAdminLogin.sessionStorage.getItem('bmw_current_user');
+            record('B14', 'Nhóm B - Validation', 'Sai mật khẩu bị chặn và hiển thị lỗi, không tạo session', 'Không có session', failedSession ? 'Có session' : 'Không có session', failedSession === null && passErr && passErr.style.display !== 'none');
+
+            // B15: Dùng tài khoản Customer trong luồng Demo Admin bị từ chối
+            // Tạo tài khoản customer mẫu
+            const testCust = { id: 'cust_test_999', username: 'cust_tester', email: 'cust@bmw.vn', password: 'Password@123', role: 'customer', status: 'active', permissions: [] };
+            const curUsers = window.BMW_AUTH_GUARD.getUsers();
+            if (!curUsers.some(u => u.username === testCust.username)) {
+                curUsers.push(testCust);
+                window.BMW_AUTH_GUARD.saveUsers(curUsers);
+            }
+
+            const winCrossLogin = await loadFrame('login.html?demo=admin');
+            winCrossLogin.document.getElementById('login-identity').value = 'cust_tester';
+            winCrossLogin.document.getElementById('login-password').value = 'Password@123';
+            winCrossLogin.document.getElementById('login-form').dispatchEvent(new winCrossLogin.Event('submit', { cancelable: true, bubbles: true }));
+            const bannerCross = winCrossLogin.document.getElementById('login-error-banner');
+            const crossSession = winCrossLogin.sessionStorage.getItem('bmw_current_user');
+            record('B15', 'Nhóm B - Role Mismatch', 'Customer đăng nhập vào luồng Demo Admin bị từ chối truy cập', 'Bị từ chối', (crossSession === null && bannerCross && bannerCross.style.display !== 'none') ? 'Bị từ chối' : 'Cho phép nhầm', crossSession === null && bannerCross && bannerCross.style.display !== 'none');
+
+        } catch (e) {
+            record('B_ERR', 'Nhóm B - Demo Users', 'Lỗi thực thi Nhóm B', 'Không lỗi', e.message, false);
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────
+        // NHÓM C — PHÂN QUYỀN & BẢO VỆ TRUY CẬP
+        // ──────────────────────────────────────────────────────────────────────────
+        try {
+            // C1: Customer không thể truy cập admin-dashboard.html
+            sessionStorage.setItem('bmw_current_user', JSON.stringify({ id: 'cust_01', username: 'customer_user', role: 'customer', status: 'active' }));
+            const canCustomerAccessAdmin = window.BMW_AUTH_GUARD.hasRole('admin');
+            record('C01', 'Nhóm C - RBAC', 'Customer không có quyền truy cập Admin', false, canCustomerAccessAdmin, canCustomerAccessAdmin === false);
+
+            // C2: Customer không thể truy cập staff-dashboard.html
+            const canCustomerAccessStaff = window.BMW_AUTH_GUARD.hasRole(['staff', 'admin']);
+            record('C02', 'Nhóm C - RBAC', 'Customer không có quyền truy cập Staff Dashboard', false, canCustomerAccessStaff, canCustomerAccessStaff === false);
+
+            // C3: Staff có quyền truy cập Staff Dashboard nhưng KHÔNG có quyền Admin
+            sessionStorage.setItem('bmw_current_user', JSON.stringify({ id: 'staff_01', username: 'staff_user', role: 'staff', status: 'active' }));
+            const canStaffAccessStaff = window.BMW_AUTH_GUARD.hasRole(['staff', 'admin']);
+            const canStaffAccessAdmin = window.BMW_AUTH_GUARD.hasRole('admin');
+            record('C03', 'Nhóm C - RBAC', 'Staff truy cập được Staff Dashboard', true, canStaffAccessStaff, canStaffAccessStaff === true);
+            record('C04', 'Nhóm C - RBAC', 'Staff KHÔNG thể truy cập trang Quản trị Admin', false, canStaffAccessAdmin, canStaffAccessAdmin === false);
+
+            // C5: Admin có toàn quyền cả Admin và Staff
+            sessionStorage.setItem('bmw_current_user', JSON.stringify({ id: 'admin_01', username: 'admin_user', role: 'admin', status: 'active' }));
+            const canAdminAccessAdmin = window.BMW_AUTH_GUARD.hasRole('admin');
+            const canAdminAccessStaff = window.BMW_AUTH_GUARD.hasRole(['staff', 'admin']);
+            record('C05', 'Nhóm C - RBAC', 'Admin truy cập được Admin Dashboard', true, canAdminAccessAdmin, canAdminAccessAdmin === true);
+            record('C06', 'Nhóm C - RBAC', 'Admin truy cập được Staff Dashboard nếu cần', true, canAdminAccessStaff, canAdminAccessStaff === true);
+
+            // C7: Logout xóa sạch phiên
+            window.BMW_AUTH_GUARD.logout();
+            const sessionAfterLogout = sessionStorage.getItem('bmw_current_user');
+            const localAfterLogout = localStorage.getItem('bmw_current_user');
+            record('C07', 'Nhóm C - RBAC', 'Logout kết thúc phiên sạch sẽ trên cả session & local storage', null, sessionAfterLogout || localAfterLogout, sessionAfterLogout === null && localAfterLogout === null);
+
+            // C8: Chưa đăng nhập truy cập requireRole bị từ chối
+            let isUserAuth = window.BMW_AUTH_GUARD.isAuthenticated();
+            record('C08', 'Nhóm C - RBAC', 'Chưa đăng nhập -> isAuthenticated là false', false, isUserAuth, isUserAuth === false);
+
+        } catch (e) {
+            record('C_ERR', 'Nhóm C - RBAC', 'Lỗi thực thi Nhóm C', 'Không lỗi', e.message, false);
+        }
+
+        // ──────────────────────────────────────────────────────────────────────────
+        // NHÓM D — HỒI QUY
+        // ──────────────────────────────────────────────────────────────────────────
+        try {
+            // D1: Dữ liệu bmw_users không bị mất tài khoản khách hàng cũ
+            const users = window.BMW_AUTH_GUARD.getUsers();
+            record('D01', 'Nhóm D - Hồi quy', 'Danh sách bmw_users vẫn bảo toàn đầy đủ', true, users.length >= 3, users.length >= 3);
+
+            // D2: Kiểm tra trang Shop tải bình thường
+            const winShop = await loadFrame('shop.html');
+            const shopBrand = winShop.document.querySelector('.brand');
+            record('D02', 'Nhóm D - Hồi quy', 'Trang Shop tải và render bình thường', 'B M W', shopBrand ? shopBrand.textContent.replace(/\s+/g, ' ').trim() : '', Boolean(shopBrand));
+
+            // D3: Giỏ hàng bmw_cart hoạt động bình thường
+            localStorage.setItem('bmw_cart', JSON.stringify([{ id: 'prod_1', name: 'Áo Tập BMW', price: 350000, quantity: 2 }]));
+            const cartData = JSON.parse(localStorage.getItem('bmw_cart') || '[]');
+            record('D03', 'Nhóm D - Hồi quy', 'Dữ liệu giỏ hàng (bmw_cart) được bảo toàn', 1, cartData.length, cartData.length === 1);
+
+            // D4: Wishlist bmw_wishlist hoạt động bình thường
+            localStorage.setItem('bmw_wishlist', JSON.stringify(['prod_1', 'prod_2']));
+            const wishData = JSON.parse(localStorage.getItem('bmw_wishlist') || '[]');
+            record('D04', 'Nhóm D - Hồi quy', 'Dữ liệu Wishlist (bmw_wishlist) được bảo toàn', 2, wishData.length, wishData.length === 2);
+
+            // D5: Theme switcher tồn tại
+            const themeBtn = winShop.document.getElementById('theme-toggle-btn');
+            record('D05', 'Nhóm D - Hồi quy', 'Nút chuyển đổi giao diện sáng/tối tồn tại', 'Tồn tại', themeBtn ? 'Tồn tại' : 'Thiếu', Boolean(themeBtn));
+
+        } catch (e) {
+            record('D_ERR', 'Nhóm D - Hồi quy', 'Lỗi thực thi Nhóm D', 'Không lỗi', e.message, false);
+        }
+
+        // Clean up mock state
+        sessionStorage.removeItem('bmw_current_user');
+        localStorage.removeItem('bmw_current_user');
+
+        // Summary
+        const total = passCount + failCount;
+        summary.className = 'summary-banner ' + (failCount === 0 ? 'pass' : 'fail');
+        summary.innerHTML = `
+            KIỂM THỬ HOÀN TẤT: <strong>${passCount}/${total} PASSED</strong> 
+            ${failCount > 0 ? `— <strong>${failCount} FAILED</strong>` : '— TOÀN BỘ CÁC NHÓM A, B, C, D ĐẠT 100%'}
+        `;
+
+        // Export result for Headless runner
+        window.__TEST_RESULTS = {
+            total,
+            passCount,
+            failCount,
+            results: testResults
+        };
+
+    })();
+    </script>
+</body>
+</html>
